@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 const slugify = require('slugify');
+// const { default: validator } = require('validator');
 // const validator = require('validator');
 
-//Createng tour Schema
+//Createng MONGOOSE Schema
 const tourSchema = new mongoose.Schema(
   {
     name: {
@@ -56,6 +57,7 @@ const tourSchema = new mongoose.Schema(
       type: Number,
       validate: {
         validator: function (val) {
+          //this points to the current document only of case of creating a new document, and not on update
           return val < this.price;
         },
         message: (props) =>
@@ -86,6 +88,29 @@ const tourSchema = new mongoose.Schema(
       select: false,
     },
     startDates: [Date],
+    startLocation: {
+      type: {
+        type: String,
+        default: 'Point',
+        enum: ['Point'],
+      },
+      coordinates: [Number],
+      adress: String,
+      description: String,
+    },
+    locations: [
+      {
+        type: {
+          type: String,
+          default: 'Point',
+          enum: ['Point'],
+        },
+        coordinates: [Number],
+        adress: String,
+        description: String,
+        day: Number,
+      },
+    ],
   },
   {
     toJSON: { virtuals: true },
@@ -102,6 +127,12 @@ tourSchema.pre('save', function (next) {
   next();
 });
 
+// post - after saving - have access to the saved document
+
+tourSchema.post('save', (doc, next) => {
+  console.log(doc);
+  next();
+});
 
 //QUERY Middleware
 tourSchema.pre(/^find/, function (next) {
@@ -121,13 +152,5 @@ tourSchema.pre('aggregate', function (next) {
 //Creating a model
 
 const Tour = mongoose.model('Tour', tourSchema);
-
-//Creating documents
-
-// const testTour = new Tour({
-//   name: 'The Forest Hiker',
-//   rating: 4.7,
-//   price: 497,
-// });
 
 module.exports = Tour;
