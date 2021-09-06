@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const slugify = require('slugify');
+// const User = require('./userModel');
 // const { default: validator } = require('validator');
 // const validator = require('validator');
 
@@ -43,6 +44,7 @@ const tourSchema = new mongoose.Schema(
       default: 4.5,
       min: [1, 'The min rating is 1'],
       max: [5, 'The max rating is 5'],
+      set: (val) => Math.round(val * 10) / 10,
     },
     ratingsQuantity: {
       type: Number,
@@ -111,6 +113,7 @@ const tourSchema = new mongoose.Schema(
         day: Number,
       },
     ],
+    guides: [{ type: mongoose.Schema.ObjectId, ref: 'User' }],
   },
   {
     toJSON: { virtuals: true },
@@ -118,39 +121,88 @@ const tourSchema = new mongoose.Schema(
   }
 );
 
+tourSchema.index({ price: 1, ratingAverage: -1 });
+tourSchema.index({ slug: 1 });
+
+tourSchema.index({ startLocation: '2dsphere' });
+
 tourSchema.virtual('durationWeek').get(function () {
   return this.duration / 7;
 });
 
+tourSchema.virtual('reviews', {
+  ref: 'Review',
+  foreignField: 'tour',
+  localField: '_id',
+});
+
+//MONGOOSE MIDDLEWARE - functions which are called before or after the event
+//TYPES -DOCUMENT, QUERY,AGGREGATE AND MODEL
+//document middleware - act on the currently processed document
+
+// pre - runs before executing of save() and create(), this points to the currently processed document
+//pre - before saving
 tourSchema.pre('save', function (next) {
   this.slug = slugify(this.name, { lower: true });
   next();
 });
 
+// tourSchema.pre('save', async function (next) {
+//   const guidesPromises = this.guides.map(async (id) => await User.findById(id));
+//   this.guides = await Promise.all(guidesPromises);
+//   next();
+// });
+
 // post - after saving - have access to the saved document
+
+//QUERY Middleware
+tourSchema.pre(/^find/, function (next) {
+  this.find({ secretTour: { $ne: true } });
+  this.start = Date.now();
+  next();
+});
+
+tourSchema.pre(/^find/, function (next) {
+  this.populate({
+    path: 'guides',
+    select: '-__v -passwordChangedAt',
+  });
+  console.log('populating guides');
+  next();
+});
+
+tourSchema.pre('findOne', function (next) {
+  this.populate('reviews');
+  console.log('populating reviews');
+  next();
+});
 
 tourSchema.post('save', (doc, next) => {
   console.log(doc);
   next();
 });
 
-//QUERY Middleware
-tourSchema.pre(/^find/, function (next) {
-  this.find({ secretTour: { $ne: true } });
-  next();
-});
-
-tourSchema.post(/^find/, (docs, next) => {
-  next();
-});
+// tourSchema.post(/^find/, (docs, next) => {
+//   next();
+// });
 
 //AGGREGATION MIDDLEWARE
 tourSchema.pre('aggregate', function (next) {
-  this.pipeline().unshift({ $match: { secretTour: { $ne: true } } });
+  if (!this.pipeline()[0].$geoNear) {
+    this.pipeline().unshift({ $match: { secretTour: { $ne: true } } });
+  }
   next();
 });
 //Creating a model
 
 const Tour = mongoose.model('Tour', tourSchema);
+
+//Creating documents
+
+// const testTour = new Tour({
+//   name: 'The Forest Hiker',
+//   rating: 4.7,
+//   price: 497,
+// });
 
 module.exports = Tour;
